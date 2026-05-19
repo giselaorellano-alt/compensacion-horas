@@ -308,7 +308,12 @@ document.getElementById('downloadBtn2').addEventListener('click', downloadNoveda
 
 function toHours(val) {
   if (val === null || val === undefined || val === '') return 0;
-  if (typeof val === 'number') return val > 0 && val < 5 ? val * 24 : val;
+  if (typeof val === 'number') {
+    // SheetJS stores timedelta as fractional days (e.g. 7.0833 = 170 hs)
+    // Any positive number < 400 days treated as days → convert to hours
+    if (val > 0) return val * 24;
+    return 0;
+  }
   if (val instanceof Date) return val.getHours() + val.getMinutes()/60 + val.getSeconds()/3600;
   if (typeof val === 'string') { const m = val.match(/(\d+):(\d+)/); if (m) return parseInt(m[1]) + parseInt(m[2])/60; }
   return 0;
