@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compensación de Horas → Tango</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --text-primary: #303036;
+    --text-secondary: #636271;
+    --brand-400: #6f93eb;
+    --brand-100: #eff2ff;
+    --brand-800: #213478;
+    --bg: #f5f6f8;
+    --white: #ffffff;
+    --border: #e2e4ea;
+    --success: #27ae60;
+    --success-light: #e8f8ef;
+    --warning: #f59e0b;
+    --warning-light: #fef3c7;
+    --error: #e53e3e;
+    --error-light: #fff5f5;
+    --shadow: -1px 4px 8px 0px rgba(233,233,244,1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    letter-spacing: 0.2px;
+    color: var(--text-primary);
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+  header { margin-bottom: 32px; }
+  header h1 { font-size: 24px; font-weight: 600; }
+  header p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+  .upload-zone {
+    background: var(--white); border: 2px dashed var(--border);
+    border-radius: 16px; padding: 48px; text-align: center;
+    cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow); margin-bottom: 24px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--brand-400); background: var(--brand-100); }
+  .upload-zone .icon { font-size: 36px; margin-bottom: 12px; }
+  .upload-zone h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .upload-zone p { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+  #fileInput { display: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    font-family: 'Roboto', sans-serif; cursor: pointer; border: none;
+    letter-spacing: 0.2px; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--brand-400); color: white; }
+  .btn-primary:hover { background: #5a7fd8; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #219a52; }
+
+  .config-panel {
+    background: var(--white); border-radius: 16px; padding: 24px;
+    box-shadow: var(--shadow); margin-bottom: 24px; display: none;
+  }
+  .config-panel h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+  .config-note {
+    font-size: 12px; color: var(--text-secondary);
+    background: var(--brand-100); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 16px; line-height: 1.6;
+  }
+  .config-note strong { color: var(--brand-800); }
+  .config-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .config-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+  .config-field input {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; font-family: 'Roboto', sans-serif; color: var(--text-primary); width: 80px;
+  }
+  .config-field input:focus { outline: none; border-color: var(--brand-400); }
+  .config-field span { font-size: 13px; color: var(--text-secondary); margin-left: 4px; }
+
+  .period-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--success-light); color: var(--success);
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .loading { display: none; text-align: center; padding: 32px; color: var(--text-secondary); }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--brand-400); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: var(--white); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+  .card-label { font-size: 12px; color: var(--text-secondary); font-weight: 600; margin-bottom: 6px; }
+  .card-value { font-size: 22px; font-weight: 600; }
+  .card-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+  .table-wrap { background: var(--white); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 24px; display: none; }
+  .table-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+  .table-toolbar h2 { font-size: 16px; font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--brand-100); }
+  thead th { padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 600; color: var(--brand-800); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:hover { background: var(--bg); }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 12px 14px; font-size: 14px; white-space: nowrap; }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--brand-400); color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; flex-shrink: 0;
+  }
+  .collab-cell { display: flex; align-items: center; gap: 10px; }
+  .collab-name { font-weight: 600; }
+  .collab-id { font-size: 12px; color: var(--text-secondary); }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge-success { background: var(--success-light); color: var(--success); }
+  .badge-info { background: var(--brand-100); color: var(--brand-800); }
+  .badge-neutral { background: #f3f4f6; color: var(--text-secondary); }
+  .badge-warning { background: var(--warning-light); color: #92400e; }
+
+  .c-success { color: var(--success); font-weight: 600; }
+  .c-error   { color: var(--error); font-weight: 600; }
+  .c-warning { color: var(--warning); font-weight: 600; }
+  .c-muted   { color: var(--text-secondary); }
+
+  .download-bar {
+    background: var(--white); border-radius: 16px; padding: 20px 24px;
+    box-shadow: var(--shadow); display: none;
+    align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .download-bar.visible { display: flex; }
+  .download-info { font-size: 14px; }
+  .download-info strong { font-weight: 600; }
+  .download-info small { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⏱ Compensación de Horas → Novedades Tango</h1>
+  <p>Cargá el reporte de Humand y generá el archivo listo para importar en Tango</p>
+</header>
+
+<div class="upload-zone" id="uploadZone">
+  <div class="icon">📂</div>
+  <h3>Subí el reporte de control horario</h3>
+  <p>Arrastrá el archivo acá o hacé click · Formato .xlsx exportado de Humand</p>
+  <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Seleccionar archivo</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls">
+</div>
+
+<div class="config-panel" id="configPanel">
+  <h2>Reglas de compensación</h2>
+  <div id="periodBadge"></div>
+  <div class="config-note">
+    Si alguien trabajó <strong>menos horas que las programadas</strong>, se compensan usando sus horas extra:<br>
+    → <strong>Horas al 50%</strong> primero (proporción 1:1 con horas normales)<br>
+    → <strong>Horas al 100%</strong> después (1 hora al 100% = 2 horas normales)<br>
+    → <strong>Nocturnas</strong> no se usan para compensar<br>
+    El resultado se refleja en el código <strong>HSTRAB</strong> de Tango.
+  </div>
+  <div class="config-row">
+    <div class="config-field">
+      <label>1 hora al 50% equivale a</label>
+      <input type="number" id="ratio50" value="1" step="0.1" min="0.1"><span>hs normales</span>
+    </div>
+    <div class="config-field">
+      <label>1 hora al 100% equivale a</label>
+      <input type="number" id="ratio100" value="2" step="0.1" min="0.1"><span>hs normales</span>
+    </div>
+    <button class="btn btn-primary" id="processBtn">Calcular ▶</button>
+  </div>
+</div>
+
+<div class="loading" id="loading"><div class="spinner"></div><p>Procesando registros...</p></div>
+
+<div id="results" style="display:none">
+  <div class="cards" id="cards"></div>
+
+  <div class="table-wrap" id="tableWrap">
+    <div class="table-toolbar">
+      <div>
+        <h2>Resultado por colaborador</h2>
+        <small id="collabCount" style="font-size:12px;color:var(--text-secondary)"></small>
+      </div>
+      <button class="btn btn-success" id="downloadBtn">⬇ Descargar Novedades Tango</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Colaborador</th>
+            <th>Programadas</th>
+            <th>Trabajadas</th>
+            <th>Balance</th>
+            <th>H. 50%</th>
+            <th>H. 100%</th>
+            <th>50% usado</th>
+            <th>100% usado</th>
+            <th>HSTRAB final</th>
+            <th>50% a cobrar</th>
+            <th>100% a cobrar</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="download-bar" id="downloadBar">
+    <div class="download-info">
+      <strong id="downloadTitle">—</strong>
+      <small id="downloadSub">—</small>
+    </div>
+    <button class="btn btn-success" id="downloadBtn2">⬇ Descargar Novedades Tango (.xlsx)</button>
+  </div>
+</div>
+
+<script>
+let processedData = [];
+let originalWorkbook = null;
+let uploadedFileName = '';
+let liquidationDate = null;
+let periodText = '';
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  uploadedFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    originalWorkbook = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+    extractPeriodDate();
+    document.getElementById('configPanel').style.display = 'block';
+    uploadZone.querySelector('.icon').textContent = '✅';
+    uploadZone.querySelector('h3').textContent = file.name;
+    uploadZone.querySelector('p').textContent = liquidationDate
+      ? `Período detectado: ${periodText} · Fecha de liquidación: ${formatDate(liquidationDate)}`
+      : 'Archivo cargado. No se detectó período automáticamente.';
+    uploadZone.style.cursor = 'default';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function extractPeriodDate() {
+  // Try to read period from sheet header row
+  const sheet = originalWorkbook.Sheets[originalWorkbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const row = rows[i];
+    if (!row) continue;
+    for (const cell of row) {
+      if (!cell) continue;
+      const s = String(cell);
+      // Match "01/04/2026 - 30/04/2026" or similar
+      const m = s.match(/(\d{2}\/\d{2}\/\d{4})\s*[-–]\s*(\d{2}\/\d{2}\/\d{4})/);
+      if (m) {
+        periodText = m[0];
+        // Parse end date dd/mm/yyyy
+        const [d, mo, y] = m[2].split('/');
+        liquidationDate = new Date(parseInt(y), parseInt(mo)-1, parseInt(d));
+        document.getElementById('periodBadge').innerHTML =
+          `<div class="period-badge">📅 Período: ${periodText} · Liquidación: ${formatDate(liquidationDate)}</div>`;
+        return;
+      }
+    }
+  }
+  // Fallback: last day of current month
+  const now = new Date();
+  liquidationDate = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  document.getElementById('periodBadge').innerHTML =
+    `<div class="period-badge" style="background:var(--warning-light);color:#92400e">⚠ Período no detectado · Usando ${formatDate(liquidationDate)}</div>`;
+}
+
+function formatDate(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+function toExcelDate(d) {
+  // Excel serial date
+  const base = new Date(1899, 11, 30);
+  return Math.round((d - base) / 86400000);
+}
+
+document.getElementById('processBtn').addEventListener('click', processData);
+document.getElementById('downloadBtn').addEventListener('click', downloadNovedades);
+document.getElementById('downloadBtn2').addEventListener('click', downloadNovedades);
+
+function toHours(val) {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return val > 0 && val < 5 ? val * 24 : val;
+  if (val instanceof Date) return val.getHours() + val.getMinutes()/60 + val.getSeconds()/3600;
+  if (typeof val === 'string') { const m = val.match(/(\d+):(\d+)/); if (m) return parseInt(m[1]) + parseInt(m[2])/60; }
+  return 0;
+}
+
+function roundH(h) { return Math.round(h * 100) / 100; }
+
+function fmtH(h) {
+  if (!h || h === 0) return '0:00';
+  const sign = h < 0 ? '-' : '', abs = Math.abs(h);
+  return `${sign}${Math.floor(abs)}:${String(Math.round((abs%1)*60)).padStart(2,'0')}`;
+}
+
+function initials(n) { return n ? n.split(',').map(p => p.trim()[0]||'').join('').slice(0,2).toUpperCase() : '?'; }
+
+function processData() {
+  if (!originalWorkbook) return;
+  document.getElementById('loading').style.display  = 'block';
+  document.getElementById('results').style.display  = 'none';
+
+  setTimeout(() => {
+    const r50  = parseFloat(document.getElementById('ratio50').value)  || 1;
+    const r100 = parseFloat(document.getElementById('ratio100').value) || 2;
+
+    const sheet   = originalWorkbook.Sheets[originalWorkbook.SheetNames[0]];
+    const rows    = XLSX.utils.sheet_to_json(sheet, { header:1, raw:false });
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true });
+
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      if (rows[i]?.some(c => typeof c === 'string' && c.includes('Nombre'))) { headerRow = i; break; }
+    }
+    if (headerRow < 0) { alert('No se encontró la fila de encabezados.'); document.getElementById('loading').style.display='none'; return; }
+
+    const headers = rows[headerRow];
+    const col = {};
+    headers.forEach((h,i) => { if (h) col[h.trim()] = i; });
+
+    const personMap = {}, personOrder = [];
+    for (let i = headerRow+1; i < rawRows.length; i++) {
+      const row = rawRows[i]; if (!row?.length) continue;
+      const uid = row[col['Usuario']], nombre = row[col['Nombre y apellido']], fecha = row[col['Fecha']];
+      if (!uid) continue;
+      if (!personMap[uid]) { personMap[uid] = {uid, nombre:'', totalRow:null}; personOrder.push(uid); }
+      if (nombre && String(nombre).trim()) personMap[uid].nombre = String(nombre).trim();
+      if (String(fecha).trim().toLowerCase() === 'total') { personMap[uid].totalRow = row; }
+    }
+
+    processedData = [];
+    for (const uid of personOrder) {
+      const p = personMap[uid]; if (!p.totalRow) continue;
+      const r = p.totalRow;
+
+      const worked  = toHours(r[col['Horas trabajadas']]);
+      const prog    = toHours(r[col['Horas programadas']]);
+      const balance = toHours(r[col['Balance']]);
+      const h50     = toHours(r[col['50%']]);
+      const h100    = toHours(r[col['100%']]);
+      const noct    = toHours(r[col['Nocturnas']]);
+
+      // Only process if there's a schedule (programmed hours > 0)
+      if (prog <= 0) continue;
+
+      let h50u = 0, h100u = 0, deficit = 0;
+      let hstrabFinal = worked;
+
+      if (balance < 0) {
+        // Has deficit: needs compensation
+        deficit = Math.abs(balance);
+        let rest = deficit;
+
+        if (h50 > 0 && rest > 0) {
+          h50u = Math.min(h50, rest / r50);
+          rest -= h50u * r50;
+        }
+        if (h100 > 0 && rest > 0) {
+          const need = rest / r100;
+          h100u = Math.min(h100, need);
+          rest -= h100u * r100;
+        }
+
+        // HSTRAB final = worked + compensated hours (in normal hour equivalent)
+        const comp = h50u * r50 + h100u * r100;
+        hstrabFinal = worked + comp;
+        if (hstrabFinal > prog) hstrabFinal = prog; // cap at programmed
+      }
+
+      const h50cobrar  = h50  - h50u;
+      const h100cobrar = h100 - h100u;
+
+      let estado = 'Sin extras';
+      if (balance >= 0 && (h50 > 0 || h100 > 0)) estado = 'A favor';
+      else if (balance < 0 && h50u === 0 && h100u === 0) estado = 'Sigue debiendo';
+      else if (balance < 0 && hstrabFinal >= prog - 0.01) estado = 'Saldado';
+      else if (balance < 0 && hstrabFinal < prog - 0.01) estado = 'Saldado parcial';
+
+      processedData.push({
+        uid, nombre: p.nombre,
+        worked: roundH(worked), prog: roundH(prog), balance: roundH(balance),
+        h50: roundH(h50), h100: roundH(h100), noct: roundH(noct),
+        h50u: roundH(h50u), h100u: roundH(h100u),
+        hstrabFinal: roundH(hstrabFinal),
+        h50cobrar: roundH(h50cobrar), h100cobrar: roundH(h100cobrar),
+        estado
+      });
+    }
+
+    renderResults();
+    document.getElementById('loading').style.display ='none';
+    document.getElementById('results').style.display  ='block';
+    document.getElementById('tableWrap').style.display='block';
+    const db = document.getElementById('downloadBar');
+    db.classList.add('visible');
+    document.getElementById('downloadTitle').textContent = `Novedades_registradas_compensadas.xlsx`;
+    document.getElementById('downloadSub').textContent = `${processedData.length} colaboradores · Fecha liquidación: ${formatDate(liquidationDate)}`;
+  }, 300);
+}
+
+function renderResults() {
+  const total    = processedData.length;
+  const conComp  = processedData.filter(p => p.h50u > 0 || p.h100u > 0).length;
+  const aFavor   = processedData.filter(p => p.estado === 'A favor').length;
+  const debiendo = processedData.filter(p => p.estado === 'Sigue debiendo').length;
+
+  document.getElementById('collabCount').textContent = `${total} colaboradores con horario programado`;
+  document.getElementById('cards').innerHTML = `
+    <div class="card"><div class="card-label">Colaboradores</div><div class="card-value">${total}</div><div class="card-sub">con hs programadas</div></div>
+    <div class="card"><div class="card-label">Con compensación</div><div class="card-value" style="color:var(--brand-400)">${conComp}</div><div class="card-sub">se aplicó</div></div>
+    <div class="card"><div class="card-label">A favor</div><div class="card-value" style="color:var(--success)">${aFavor}</div><div class="card-sub">extras sobrantes</div></div>
+    ${debiendo ? `<div class="card"><div class="card-label">Sigue debiendo</div><div class="card-value" style="color:var(--error)">${debiendo}</div><div class="card-sub">no alcanzó extras</div></div>` : ''}
+    <div class="card"><div class="card-label">Fecha liquidación</div><div class="card-value" style="font-size:16px">${formatDate(liquidationDate)}</div><div class="card-sub">del período</div></div>
+  `;
+
+  const bm = {'A favor':'badge-success','Saldado':'badge-info','Saldado parcial':'badge-warning','Sigue debiendo':'badge-error','Sin extras':'badge-neutral'};
+  const so = {'Sigue debiendo':0,'Saldado parcial':1,'A favor':2,'Saldado':3,'Sin extras':4};
+  const sorted = [...processedData].sort((a,b) => (so[a.estado]||5)-(so[b.estado]||5));
+
+  document.getElementById('tbody').innerHTML = sorted.map(p => `
+    <tr>
+      <td><div class="collab-cell"><div class="avatar">${initials(p.nombre)}</div><div><div class="collab-name">${p.nombre||'—'}</div><div class="collab-id">${p.uid}</div></div></div></td>
+      <td>${fmtH(p.prog)}</td>
+      <td>${fmtH(p.worked)}</td>
+      <td class="${p.balance<0?'c-error':p.balance>0?'c-success':'c-muted'}">${fmtH(p.balance)}</td>
+      <td>${fmtH(p.h50)}</td>
+      <td>${fmtH(p.h100)}</td>
+      <td class="${p.h50u>0?'c-warning':'c-muted'}">${fmtH(p.h50u)}</td>
+      <td class="${p.h100u>0?'c-warning':'c-muted'}">${fmtH(p.h100u)}</td>
+      <td class="${p.hstrabFinal>p.worked?'c-success':''}" style="font-weight:600">${fmtH(p.hstrabFinal)}</td>
+      <td class="${p.h50cobrar>0?'c-success':'c-muted'}">${fmtH(p.h50cobrar)}</td>
+      <td class="${p.h100cobrar>0?'c-success':'c-muted'}">${fmtH(p.h100cobrar)}</td>
+      <td><span class="badge ${bm[p.estado]||'badge-neutral'}">${p.estado}</span></td>
+    </tr>
+  `).join('');
+}
+
+function downloadNovedades() {
+  if (!processedData.length || !liquidationDate) return;
+
+  const wb = XLSX.utils.book_new();
+
+  // --- Sheet: Novedades registradas ---
+  const dateSerial = toExcelDate(liquidationDate);
+  const rows = [
+    ['Fecha', 'Número de legajo', 'Código de novedad', 'Cantidad', 'Valor', 'Observaciones', 'Eliminar', 'ROW_VERSION']
+  ];
+
+  for (const p of processedData) {
+    // Always emit HSTRAB with compensated value
+    // Only emit if there's something meaningful
+    const novedades = [];
+
+    // HSTRAB: final worked hours after compensation
+    if (p.hstrabFinal > 0) {
+      novedades.push(['HSTRAB', roundH(p.hstrabFinal)]);
+    }
+
+    // HSEXT50 cobrable
+    if (p.h50cobrar > 0) {
+      novedades.push(['HSEXT50', roundH(p.h50cobrar)]);
+    }
+
+    // HSEXT100 cobrable
+    if (p.h100cobrar > 0) {
+      novedades.push(['HSEXT100', roundH(p.h100cobrar)]);
+    }
+
+    // HSNOCT (nocturnas — always informative, no compensation)
+    if (p.noct > 0) {
+      novedades.push(['HSNOCT', roundH(p.noct)]);
+    }
+
+    for (const [cod, cant] of novedades) {
+      rows.push([
+        dateSerial,   // Fecha (Excel serial)
+        p.uid,        // Número de legajo
+        cod,          // Código de novedad
+        cant,         // Cantidad
+        0,            // Valor
+        '',           // Observaciones
+        '',           // Eliminar
+        ''            // ROW_VERSION
+      ]);
+    }
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Format date column as date
+  const dateFormat = 'DD/MM/YYYY';
+  for (let r = 1; r < rows.length; r++) {
+    const cellRef = XLSX.utils.encode_cell({r, c: 0});
+    if (ws[cellRef]) ws[cellRef].z = dateFormat;
+  }
+
+  // Column widths
+  ws['!cols'] = [
+    {wch:14},{wch:18},{wch:14},{wch:10},{wch:10},{wch:20},{wch:8},{wch:14}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Novedades registradas');
+
+  // --- Sheet: Resumen ---
+  const resRows = [
+    ['Legajo','Nombre','Hs Programadas','Hs Trabajadas','Balance','H.50%','H.100%','H.Noct','50% usado','100% usado','HSTRAB Final','50% a cobrar','100% a cobrar','Estado']
+  ];
+  for (const p of processedData) {
+    resRows.push([p.uid, p.nombre, p.prog, p.worked, p.balance, p.h50, p.h100, p.noct, p.h50u, p.h100u, p.hstrabFinal, p.h50cobrar, p.h100cobrar, p.estado]);
+  }
+  const wsRes = XLSX.utils.aoa_to_sheet(resRows);
+  wsRes['!cols'] = [{wch:10},{wch:30},{wch:14},{wch:14},{wch:10},{wch:8},{wch:8},{wch:8},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen compensaciones');
+
+  const period = periodText.replace(/\//g,'-').replace(/\s/g,'') || formatDate(liquidationDate).replace(/\//g,'-');
+  XLSX.writeFile(wb, `Novedades_compensadas_${period}.xlsx`);
+}
+</script>
+</body>
+</html>
